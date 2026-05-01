@@ -512,23 +512,45 @@ def _parse_harness_input(data: dict, harness: str) -> dict:
         "session_id": _sanitize_session_id(str(data.get("session_id", "unknown"))),
         "stop_hook_active": data.get("stop_hook_active", False),
         "transcript_path": str(data.get("transcript_path", "")),
+        # Claude Code provides the project directory as cwd; used to resolve
+        # mempalace.yaml for project-level wing overrides.
+        "cwd": str(data.get("cwd", "")),
     }
 
 
-def _wing_from_transcript_path(transcript_path: str) -> str:
-    """Derive a project wing name from a Claude Code transcript path.
+def _wing_from_transcript_path(transcript_path: str, cwd: str = "") -> str:
+    """Derive a project wing name for a Claude Code transcript.
 
-    Claude Code encodes the project's source directory by replacing path
-    separators with dashes, producing folders like:
-        ~/.claude/projects/-home-<user>-Projects-<project>/session.jsonl
-        ~/.claude/projects/-home-<user>-dev-<parent>-<project>/session.jsonl
-        ~/.claude/projects/-Users-<user>-<folder>-<project>/session.jsonl
+    Resolution order:
+      1. ``<cwd>/mempalace.yaml`` ``wing:`` field, if present.
+      2. Path-derived ``wing_<project>`` from the dash-encoded project folder
+         under ``~/.claude/projects/``.
+      3. Legacy ``-Projects-<name>`` segment fallback.
+      4. ``wing_sessions`` if nothing else matches.
 
-    The project directory name is the final dash-separated token of the
-    encoded folder. Returns ``wing_<project>`` (lowercased, spaces → ``_``).
-    Falls back to ``wing_sessions`` if the path does not match a Claude Code
-    project-folder layout.
+    The cwd-based override exists so projects with a ``mempalace.yaml`` can
+    route their session transcripts into a custom wing in the user's
+    taxonomy (e.g. ``customer_engagements``, ``meta_palace``) instead of
+    creating a path-derived ``wing_<projname>`` that doesn't exist in the
+    user's configured wings.
     """
+    # Project-level mempalace.yaml override takes precedence.
+    if cwd:
+        try:
+            yaml_path = Path(cwd) / "mempalace.yaml"
+            if yaml_path.is_file():
+                import yaml as _yaml
+
+                with open(yaml_path, encoding="utf-8") as f:
+                    project_cfg = _yaml.safe_load(f) or {}
+                wing = project_cfg.get("wing")
+                if isinstance(wing, str) and wing.strip():
+                    return wing.strip()
+        except Exception:
+            # Fail open — fall through to path-derived logic on any read /
+            # parse error so a malformed mempalace.yaml never drops data.
+            pass
+
     # Normalize path separators for cross-platform (Windows backslashes)
     normalized = transcript_path.replace("\\", "/")
     # Primary: pull the encoded project folder out of ``.claude/projects/``
@@ -554,6 +576,18 @@ def hook_stop(data: dict, harness: str):
     session_id = parsed["session_id"]
     stop_hook_active = parsed["stop_hook_active"]
     transcript_path = parsed["transcript_path"]
+
+    # Fork toggle: short-circuit if hook_stop_auto_save is disabled.
+    # Fail open on config-read errors so data is never silently lost.
+    try:
+        from .config import MempalaceConfig
+
+        if not MempalaceConfig().hook_stop_auto_save:
+            _log(f"Session {session_id}: hook_stop_auto_save=False, skipping")
+            _output({})
+            return
+    except Exception as exc:
+        _log(f"WARNING: hook_stop_auto_save check failed ({exc}); proceeding")
 
     # If already in a block-mode save cycle, let through (infinite-loop prevention).
     # Silent mode saves directly without returning {"decision":"block"}, so there's
@@ -610,7 +644,7 @@ def hook_stop(data: dict, harness: str):
             silent = True
             toast = False
 
-        project_wing = _wing_from_transcript_path(transcript_path)
+        project_wing = _wing_from_transcript_path(transcript_path, parsed.get("cwd", ""))
 
         if silent:
             # Save directly via Python API — systemMessage renders in terminal
@@ -676,6 +710,17 @@ def hook_precompact(data: dict, harness: str):
     parsed = _parse_harness_input(data, harness)
     session_id = parsed["session_id"]
     transcript_path = parsed["transcript_path"]
+
+    # Fork toggle: short-circuit if hook_precompact_auto_save is disabled.
+    try:
+        from .config import MempalaceConfig
+
+        if not MempalaceConfig().hook_precompact_auto_save:
+            _log(f"Session {session_id}: hook_precompact_auto_save=False, skipping")
+            _output({})
+            return
+    except Exception as exc:
+        _log(f"WARNING: hook_precompact_auto_save check failed ({exc}); proceeding")
 
     _log(f"PRE-COMPACT triggered for session {session_id}")
 

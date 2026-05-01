@@ -299,6 +299,30 @@ class MempalaceConfig:
         """Whether the stop hook shows a desktop notification via notify-send."""
         return self._file_config.get("hooks", {}).get("desktop_toast", False)
 
+    @property
+    def hook_stop_auto_save(self) -> bool:
+        """If False, the Stop hook short-circuits (no diary save, no transcript ingest).
+
+        Default: True. Env var MEMPALACE_HOOK_STOP_AUTO_SAVE wins over file.
+        File: {"hooks": {"stop_auto_save": false}} in ~/.mempalace/config.json.
+        """
+        env = os.environ.get("MEMPALACE_HOOK_STOP_AUTO_SAVE", "")
+        if env:
+            return env.lower() not in ("false", "0", "no", "off")
+        return self._file_config.get("hooks", {}).get("stop_auto_save", True)
+
+    @property
+    def hook_precompact_auto_save(self) -> bool:
+        """Mirror of hook_stop_auto_save for the PreCompact hook.
+
+        Default: True. Env var MEMPALACE_HOOK_PRECOMPACT_AUTO_SAVE wins over file.
+        File: {"hooks": {"precompact_auto_save": false}} in ~/.mempalace/config.json.
+        """
+        env = os.environ.get("MEMPALACE_HOOK_PRECOMPACT_AUTO_SAVE", "")
+        if env:
+            return env.lower() not in ("false", "0", "no", "off")
+        return self._file_config.get("hooks", {}).get("precompact_auto_save", True)
+
     def set_hook_setting(self, key: str, value: bool):
         """Update a hook setting and write config to disk."""
         if "hooks" not in self._file_config:
