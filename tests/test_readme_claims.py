@@ -448,16 +448,20 @@ class TestVersionBadge:
     def test_readme_badge_matches_version_py(self):
         """Claim: README badge shows current version.
         The shields.io badge URL must contain the version from version.py."""
+        from urllib.parse import unquote
+
         version_src = _read(MEMPALACE_PKG / "version.py")
         version_match = re.search(r'__version__\s*=\s*"([^"]+)"', version_src)
         assert version_match, "Could not parse __version__ from version.py"
         code_version = version_match.group(1)
 
         readme = _readme()
-        # Find the version badge URL
-        badge_match = re.search(r"shields\.io/badge/version-([^-]+)-", readme)
+        # Find the version badge URL. shields.io renders a single literal "-"
+        # as "--" inside the path segment, so capture everything up to the
+        # final "-COLOR?" boundary, then collapse the doubled dashes.
+        badge_match = re.search(r"shields\.io/badge/version-(.+?)-[0-9a-fA-F]{6}\?", readme)
         assert badge_match, "Could not find version badge URL in README"
-        badge_version = badge_match.group(1)
+        badge_version = unquote(badge_match.group(1)).replace("--", "-")
 
         assert badge_version == code_version, (
             f"README badge says {badge_version} but version.py says {code_version}. "

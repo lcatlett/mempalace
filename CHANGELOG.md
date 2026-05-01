@@ -6,6 +6,69 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [3.3.3+lc.1] — 2026-05-01 (lcatlett fork)
+
+Fork-exclusive release on `lcatlett/mempalace` that respects user-defined
+taxonomy from `~/.mempalace/config.json` and per-project `mempalace.yaml`.
+Use case: work-knowledge palace for an enterprise architect rather than a
+diary AI. Not intended for upstream merge.
+
+### Added
+
+- **`hooks.stop_auto_save` and `hooks.precompact_auto_save` config flags**
+  (and matching `MEMPALACE_HOOK_STOP_AUTO_SAVE` /
+  `MEMPALACE_HOOK_PRECOMPACT_AUTO_SAVE` env vars). When `false`, the
+  corresponding hook short-circuits to a no-op `{}` response and skips all
+  ingest work — the equivalent of disabling the hook without disabling the
+  whole plugin (which would also kill slash commands and MCP tools). Env
+  vars win over file settings, so a temporary `export
+  MEMPALACE_HOOK_STOP_AUTO_SAVE=false` cleanly pauses auto-mining for a
+  single shell session during bulk historical ingest. Defaults to `true`
+  (upstream behavior).
+- **`mempalace_hook_settings` MCP tool** now exposes `stop_auto_save` and
+  `precompact_auto_save` kwargs so the toggles can be flipped from inside
+  Claude Code without editing `~/.mempalace/config.json` or restarting the
+  shell.
+- **Project-level wing override via `mempalace.yaml`**.
+  `_wing_from_transcript_path` now reads `<cwd>/mempalace.yaml`'s `wing:`
+  field (when present) before falling back to the path-derived
+  `wing_<project>` name. This lets transcripts for a given project route
+  into a custom taxonomy wing — e.g. a customer-engagement repo with
+  `wing: customer_engagements` no longer creates a one-off path-derived
+  `wing_<projname>`. `cwd` is now extracted from hook stdin JSON via
+  `_parse_harness_input`. Backward-compatible: callers that omit `cwd`
+  see identical path-derived behavior.
+
+### Changed
+
+- **`detect_convo_room` consults `hall_keywords` first.** Conversation
+  chunks are now scored against the user's configured `hall_keywords`
+  (from `~/.mempalace/config.json` or `DEFAULT_HALL_KEYWORDS`) before
+  falling back to the built-in `TOPIC_KEYWORDS` dict. Custom rooms
+  defined in user taxonomy now actually receive their matching content.
+  Sparse content with no `hall_keywords` hits still falls through to the
+  built-in 5-room dict (`technical`/`architecture`/`planning`/
+  `decisions`/`problems`) and finally to `general`.
+
+### Deferred from spec
+
+- **Default 12-wing taxonomy** rewrite (`DEFAULT_TOPIC_WINGS` /
+  `DEFAULT_HALL_KEYWORDS`) was marked optional in the handoff doc and is
+  skipped — existing user palaces have already overridden the defaults
+  via `~/.mempalace/config.json`, and new corpora should adopt
+  `mempalace.yaml` for per-project wing routing.
+
+### Notes
+
+- Plugin metadata (`plugin.json`, `marketplace.json`, `.codex-plugin/plugin.json`)
+  uses semver-style `3.3.3-lc.1`. Python package metadata
+  (`pyproject.toml`, `version.py`) uses PEP 440 local-version form
+  `3.3.3+lc.1`. Both refer to the same fork release.
+- `repository` in `plugin.json` updated to `lcatlett/mempalace` so
+  Claude's plugin manager doesn't offer to "upgrade" back to upstream.
+
+---
+
 ## [3.3.4] — unreleased
 
 ### Added

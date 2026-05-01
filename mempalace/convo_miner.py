@@ -257,8 +257,31 @@ TOPIC_KEYWORDS = {
 
 
 def detect_convo_room(content: str) -> str:
-    """Score conversation content against topic keywords."""
+    """Score conversation content against keyword sets to pick a room.
+
+    Priority order:
+      1. User's configured ``hall_keywords`` from ``~/.mempalace/config.json``
+         (lets custom taxonomies route their own conversation chunks).
+      2. Built-in ``TOPIC_KEYWORDS`` (fallback for sparse content).
+      3. ``"general"`` if nothing matches.
+    """
     content_lower = content[:3000].lower()
+
+    try:
+        from .config import MempalaceConfig
+
+        custom = MempalaceConfig().hall_keywords or {}
+    except Exception:
+        custom = {}
+
+    scores: dict[str, int] = {}
+    for room, keywords in custom.items():
+        score = sum(1 for kw in keywords if kw.lower() in content_lower)
+        if score > 0:
+            scores[room] = score
+    if scores:
+        return max(scores, key=scores.get)
+
     scores = {}
     for room, keywords in TOPIC_KEYWORDS.items():
         score = sum(1 for kw in keywords if kw in content_lower)

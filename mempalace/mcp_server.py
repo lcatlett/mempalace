@@ -656,7 +656,7 @@ def tool_check_duplicate(content: str, threshold: float = 0.9):
             "vector_disabled": True,
             "vector_disabled_reason": _vector_disabled_reason,
             "hint": (
-                "duplicate detection requires vector search; run " "`mempalace repair` to restore"
+                "duplicate detection requires vector search; run `mempalace repair` to restore"
             ),
         }
     try:
@@ -1243,7 +1243,12 @@ def tool_diary_read(agent_name: str, last_n: int = 10, wing: str = ""):
         return {"error": "Failed to read diary entries"}
 
 
-def tool_hook_settings(silent_save: bool = None, desktop_toast: bool = None):
+def tool_hook_settings(
+    silent_save: bool = None,
+    desktop_toast: bool = None,
+    stop_auto_save: bool = None,
+    precompact_auto_save: bool = None,
+):
     """
     Get or set hook behavior settings.
 
@@ -1251,6 +1256,12 @@ def tool_hook_settings(silent_save: bool = None, desktop_toast: bool = None):
       False = legacy blocking MCP calls. Default: True.
     - desktop_toast: True = show notify-send desktop toast on save,
       False = terminal-only notification. Default: False.
+    - stop_auto_save: False = Stop hook short-circuits (no diary save,
+      no transcript ingest). Default: True. Env var
+      MEMPALACE_HOOK_STOP_AUTO_SAVE wins over this file setting.
+    - precompact_auto_save: False = PreCompact hook short-circuits.
+      Default: True. Env var MEMPALACE_HOOK_PRECOMPACT_AUTO_SAVE wins
+      over this file setting.
 
     Call with no arguments to see current settings.
     """
@@ -1268,6 +1279,12 @@ def tool_hook_settings(silent_save: bool = None, desktop_toast: bool = None):
     if desktop_toast is not None:
         config.set_hook_setting("desktop_toast", desktop_toast)
         changed.append(f"desktop_toast → {desktop_toast}")
+    if stop_auto_save is not None:
+        config.set_hook_setting("stop_auto_save", stop_auto_save)
+        changed.append(f"stop_auto_save → {stop_auto_save}")
+    if precompact_auto_save is not None:
+        config.set_hook_setting("precompact_auto_save", precompact_auto_save)
+        changed.append(f"precompact_auto_save → {precompact_auto_save}")
 
     # Re-read to return current state
     try:
@@ -1280,6 +1297,8 @@ def tool_hook_settings(silent_save: bool = None, desktop_toast: bool = None):
         "settings": {
             "silent_save": config.hook_silent_save,
             "desktop_toast": config.hook_desktop_toast,
+            "stop_auto_save": config.hook_stop_auto_save,
+            "precompact_auto_save": config.hook_precompact_auto_save,
         },
     }
     if changed:
@@ -1756,7 +1775,11 @@ TOOLS = {
         "description": (
             "Get or set hook behavior. silent_save: True = save directly "
             "(no MCP clutter), False = legacy blocking. desktop_toast: "
-            "True = show desktop notification. Call with no args to view."
+            "True = show desktop notification. stop_auto_save / "
+            "precompact_auto_save: False = short-circuit the hook entirely "
+            "(useful during bulk historical ingest). Env vars "
+            "MEMPALACE_HOOK_STOP_AUTO_SAVE and MEMPALACE_HOOK_PRECOMPACT_AUTO_SAVE "
+            "win over file settings. Call with no args to view."
         ),
         "input_schema": {
             "type": "object",
@@ -1768,6 +1791,14 @@ TOOLS = {
                 "desktop_toast": {
                     "type": "boolean",
                     "description": "True = show desktop toast via notify-send",
+                },
+                "stop_auto_save": {
+                    "type": "boolean",
+                    "description": "False = Stop hook short-circuits (no save, no ingest)",
+                },
+                "precompact_auto_save": {
+                    "type": "boolean",
+                    "description": "False = PreCompact hook short-circuits (no ingest)",
                 },
             },
         },

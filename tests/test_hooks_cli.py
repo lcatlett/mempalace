@@ -177,6 +177,8 @@ def _capture_hook_output(hook_fn, data, harness="claude-code", state_dir=None):
     mock_config = MagicMock()
     type(mock_config).hook_silent_save = PropertyMock(return_value=True)
     type(mock_config).hook_desktop_toast = PropertyMock(return_value=False)
+    type(mock_config).hook_stop_auto_save = PropertyMock(return_value=True)
+    type(mock_config).hook_precompact_auto_save = PropertyMock(return_value=True)
     patches.append(patch("mempalace.config.MempalaceConfig", return_value=mock_config))
     with contextlib.ExitStack() as stack:
         for p in patches:

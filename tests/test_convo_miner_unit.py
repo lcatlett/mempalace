@@ -63,25 +63,70 @@ class TestChunkExchanges:
 
 
 class TestDetectConvoRoom:
-    def test_technical_room(self):
+    """Tests target the built-in TOPIC_KEYWORDS fallback path.
+
+    detect_convo_room first consults MempalaceConfig().hall_keywords (which
+    resolves to DEFAULT_HALL_KEYWORDS or the user's ~/.mempalace/config.json).
+    To exercise TOPIC_KEYWORDS deterministically across machines, each test
+    forces the hall_keywords pass to score zero by stubbing it empty.
+    """
+
+    @staticmethod
+    def _no_hall_keywords(monkeypatch):
+        from mempalace import config as _config_mod
+
+        class _StubConfig:
+            hall_keywords: dict = {}
+
+        monkeypatch.setattr(_config_mod, "MempalaceConfig", lambda: _StubConfig())
+
+    def test_technical_room(self, monkeypatch):
+        self._no_hall_keywords(monkeypatch)
         content = "Let me debug this python function and fix the code error in the api"
         assert detect_convo_room(content) == "technical"
 
-    def test_planning_room(self):
+    def test_planning_room(self, monkeypatch):
+        self._no_hall_keywords(monkeypatch)
         content = "We need to plan the roadmap for the next sprint and set milestone deadlines"
         assert detect_convo_room(content) == "planning"
 
-    def test_architecture_room(self):
+    def test_architecture_room(self, monkeypatch):
+        self._no_hall_keywords(monkeypatch)
         content = "The architecture uses a service layer with component interface and module design"
         assert detect_convo_room(content) == "architecture"
 
-    def test_decisions_room(self):
+    def test_decisions_room(self, monkeypatch):
+        self._no_hall_keywords(monkeypatch)
         content = "We decided to switch and migrated to the new framework after we chose it"
         assert detect_convo_room(content) == "decisions"
 
-    def test_general_fallback(self):
+    def test_general_fallback(self, monkeypatch):
+        self._no_hall_keywords(monkeypatch)
         content = "Hello, how are you doing today? The weather is nice."
         assert detect_convo_room(content) == "general"
+
+    def test_hall_keywords_take_priority_over_topic_keywords(self, monkeypatch):
+        """Custom hall_keywords win over the built-in TOPIC_KEYWORDS dict."""
+        from mempalace import config as _config_mod
+
+        class _StubConfig:
+            hall_keywords = {"governance": ["tengu_session_memory"]}
+
+        monkeypatch.setattr(_config_mod, "MempalaceConfig", lambda: _StubConfig())
+        # "code" and "function" would have hit TOPIC_KEYWORDS["technical"],
+        # but the custom governance match must dominate.
+        content = "context note about tengu_session_memory in this code function"
+        assert detect_convo_room(content) == "governance"
+
+    def test_hall_keywords_fall_through_to_topic_keywords_when_no_match(self, monkeypatch):
+        from mempalace import config as _config_mod
+
+        class _StubConfig:
+            hall_keywords = {"governance": ["tengu_session_memory"]}
+
+        monkeypatch.setattr(_config_mod, "MempalaceConfig", lambda: _StubConfig())
+        content = "Let me debug this python function and fix the api error"
+        assert detect_convo_room(content) == "technical"
 
 
 class TestScanConvos:

@@ -1,12 +1,12 @@
 [project]
 name = "mempalace"
-version = "3.3.3"
+version = "3.3.3+lc.1"
 description = "Give your AI a memory — mine projects and conversations into a searchable palace. No API key required."
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 authors = [
-    {name = "milla-jovovich"},
+    {name = "lcatlett"},
 ]
 keywords = [
     "ai", "memory", "llm", "rag", "chromadb", "mcp",
@@ -33,9 +33,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/MemPalace/mempalace"
-Repository = "https://github.com/MemPalace/mempalace"
-"Bug Tracker" = "https://github.com/MemPalace/mempalace/issues"
+Homepage = "https://github.com/lcatlett/mempalace"
+Repository = "https://github.com/lcatlett/mempalace"
+"Bug Tracker" = "https://github.com/lcatlett/mempalace/issues"
 
 [project.scripts]
 mempalace = "mempalace.cli:main"
