@@ -6,6 +6,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [3.3.4+lc.1] — 2026-05-01 (lcatlett fork)
+
+Fork-exclusive patch on `lcatlett/mempalace`. Treats the absence of
+`~/.mempalace/` itself as a hard "auto-save off" signal across all hooks.
+
+### Changed
+
+- **Absent `~/.mempalace/` is now a kill-switch.** `hook_stop`,
+  `hook_precompact`, and `hook_session_start` each check for the directory
+  before any disk I/O (including before the short-circuit log line). `_log()`
+  also gains the same guard as a second layer of defense. When the directory
+  is absent, all three hooks return `{}` on stdout and exit without creating
+  any files or directories.
+
+  **Trigger:** on 2026-05-01, a deliberate `rm -rf ~/.mempalace/` intended to
+  stop all auto-capture was immediately undone by the next hook fire. The hooks
+  defaulted their toggles to `true` (no config = no override), called `_log()`
+  which called `STATE_DIR.mkdir()`, and proceeded to walk transcripts and file
+  146 drawers into a fresh palace — into a planning session that was explicitly
+  not meant to be captured. The `rm -rf` had been repeated multiple times
+  without effect, resulting in ~14 hours of unintended saves.
+
+- **Session-start** is now neutralized by directory absence. It does not yet
+  have its own `hook_session_start_auto_save` toggle for the case where the
+  directory exists but instrumentation is unwanted — defer to a future patch.
+
+### Added
+
+- `PALACE_ROOT = Path.home() / ".mempalace"` module-level constant in
+  `hooks_cli.py` (the observable guard point).
+- `_palace_root_exists()` helper — the single callable that all three hook
+  entry guards delegate to, making the kill-switch easy to test and trace.
+
+### Preserved
+
+- Deviation A from `HANDOFF-FORK-IMPLEMENTED.md` (nested `hooks.*` config
+  schema) is unchanged. Nothing in this patch touches config parsing.
+
+---
+
 ## [3.3.3+lc.1] — 2026-05-01 (lcatlett fork)
 
 Fork-exclusive release on `lcatlett/mempalace` that respects user-defined

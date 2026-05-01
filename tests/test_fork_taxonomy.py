@@ -16,10 +16,13 @@ import io
 import json
 from unittest.mock import MagicMock, PropertyMock, patch
 
+import mempalace.hooks_cli as hooks_cli_mod
 from mempalace.hooks_cli import (
+    _log,
     _parse_harness_input,
     _wing_from_transcript_path,
     hook_precompact,
+    hook_session_start,
     hook_stop,
 )
 
@@ -245,3 +248,75 @@ def test_parse_harness_input_cwd_defaults_empty():
         "claude-code",
     )
     assert result["cwd"] == ""
+
+
+# ---------------------------------------------------------------------------
+# Absent palace dir: hooks must not recreate ~/.mempalace/ (3.3.4+lc.1)
+# ---------------------------------------------------------------------------
+
+
+class TestHookAbsentDir:
+    """When ~/.mempalace/ is absent, all hooks must return {} without touching disk."""
+
+    _HOOK_DATA = {
+        "session_id": "absent-test",
+        "stop_hook_active": False,
+        "transcript_path": "/dev/null",
+        "cwd": "/tmp",
+    }
+
+    def _run_hook(self, hook_fn, tmp_path, monkeypatch):
+        """Run hook_fn with PALACE_ROOT and STATE_DIR pointing at a non-existent subdir."""
+        absent_root = tmp_path / ".mempalace"
+        absent_state = absent_root / "hook_state"
+        # Do NOT create absent_root — that's the whole point
+        monkeypatch.setattr(hooks_cli_mod, "PALACE_ROOT", absent_root)
+        monkeypatch.setattr(hooks_cli_mod, "STATE_DIR", absent_state)
+        buf = io.StringIO()
+        with patch("mempalace.hooks_cli._output", side_effect=lambda d: buf.write(json.dumps(d))):
+            hook_fn(self._HOOK_DATA, "claude-code")
+        return buf.getvalue(), absent_root
+
+    def test_hook_stop_does_not_create_palace_dir(self, tmp_path, monkeypatch):
+        output, absent_root = self._run_hook(hook_stop, tmp_path, monkeypatch)
+        assert json.loads(output or "{}") == {}
+        assert not absent_root.exists(), "hook_stop must not recreate ~/.mempalace/"
+
+    def test_hook_precompact_does_not_create_palace_dir(self, tmp_path, monkeypatch):
+        output, absent_root = self._run_hook(hook_precompact, tmp_path, monkeypatch)
+        assert json.loads(output or "{}") == {}
+        assert not absent_root.exists(), "hook_precompact must not recreate ~/.mempalace/"
+
+    def test_hook_session_start_does_not_create_palace_dir(self, tmp_path, monkeypatch):
+        output, absent_root = self._run_hook(hook_session_start, tmp_path, monkeypatch)
+        assert json.loads(output or "{}") == {}
+        assert not absent_root.exists(), "hook_session_start must not recreate ~/.mempalace/"
+
+    def test_log_does_not_create_palace_dir_when_absent(self, tmp_path, monkeypatch):
+        absent_root = tmp_path / ".mempalace"
+        absent_state = absent_root / "hook_state"
+        monkeypatch.setattr(hooks_cli_mod, "PALACE_ROOT", absent_root)
+        monkeypatch.setattr(hooks_cli_mod, "STATE_DIR", absent_state)
+        # Reset the initialized flag so _log would normally try to mkdir
+        monkeypatch.setattr(hooks_cli_mod, "_state_dir_initialized", False)
+        _log("should be silently dropped")
+        assert not absent_root.exists(), "_log must not recreate ~/.mempalace/ when absent"
+
+    def test_existing_dir_proceeds_normally(self, tmp_path, monkeypatch):
+        """Regression: when ~/.mempalace/ exists, hook_stop still calls _count_human_messages."""
+        present_root = tmp_path / ".mempalace"
+        present_root.mkdir(parents=True)
+        present_state = present_root / "hook_state"
+        monkeypatch.setattr(hooks_cli_mod, "PALACE_ROOT", present_root)
+        monkeypatch.setattr(hooks_cli_mod, "STATE_DIR", present_state)
+        mock_config = MagicMock()
+        type(mock_config).hook_stop_auto_save = PropertyMock(return_value=True)
+        type(mock_config).hook_silent_save = PropertyMock(return_value=True)
+        type(mock_config).hook_desktop_toast = PropertyMock(return_value=False)
+        with (
+            patch("mempalace.hooks_cli._output"),
+            patch("mempalace.config.MempalaceConfig", return_value=mock_config),
+            patch("mempalace.hooks_cli._count_human_messages", return_value=0) as mock_count,
+        ):
+            hook_stop(self._HOOK_DATA, "claude-code")
+        mock_count.assert_called_once()
